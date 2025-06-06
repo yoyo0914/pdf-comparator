@@ -1,0 +1,18 @@
+
+# PDF處理相關
+PyMuPDF==1.23.26
+pytesseract==0.3.10
+Pillow==10.1.0
+
+# HTTP請求
+requests==2.31.0
+
+# 進階表格解析 (可選)
+pandas>=1.5.0
+numpy>=1.21.0
+camelot-py[cv]>=0.10.1
+tabula-py>=2.8.0
+
+# WSL環境需要安裝:
+# sudo apt-get install tesseract-ocr tesseract-ocr-chi-tra
+# sudo apt-get install python3-tk ghostscript default-jre
