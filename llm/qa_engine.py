@@ -51,7 +51,7 @@ class QAEngine:
                 
         except requests.exceptions.RequestException:
             print(f"無法連接Ollama ({self.ollama_url})")
-            print("請確認服務已啟動: ollama serve")
+            print("確認服務已啟動: ollama serve")
     
     def generate_answer(self, prompt: str, temperature: float = 0.3, max_tokens: int = 2048) -> Optional[str]:
         for attempt in range(self.max_retries):
@@ -144,7 +144,7 @@ class QAEngine:
         return has_numbers or has_currency or has_percentage or len(answer) > 100
     
     def _get_fallback_answer(self) -> str:
-        return "抱歉，目前無法連接到語言模型服務。請檢查Ollama服務是否正常運行。"
+        return "目前無法連接到語言模型服務。請檢查Ollama服務是否正常運行。"
     
     def chat_with_context(self, messages: list, temperature: float = 0.3) -> Optional[str]:
         try:

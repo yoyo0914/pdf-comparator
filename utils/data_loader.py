@@ -1,6 +1,3 @@
-"""
-資料載入器
-"""
 import os
 import json
 import logging

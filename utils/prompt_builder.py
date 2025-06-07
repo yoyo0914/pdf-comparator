@@ -1,6 +1,3 @@
-"""
-多輪對話Prompt組合器
-"""
 import json
 from datetime import datetime
 
