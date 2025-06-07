@@ -25,9 +25,9 @@ python app.py --mode analysis
 python app.py --mode chat
 ```
 ### 指令
-help 顯示幫助
-save 儲存當前對話
-load 載入歷史對話
-clear 清除對話歷史
-quit 退出系統
+help 顯示幫助  
+save 儲存當前對話  
+load 載入歷史對話  
+clear 清除對話歷史  
+quit 退出系統  
 
