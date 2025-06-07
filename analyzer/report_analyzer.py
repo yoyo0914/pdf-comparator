@@ -1,8 +1,6 @@
 import os
-import re
 import json
 from datetime import datetime
-from typing import Dict, List, Any
 
 class FinancialReportAnalyzer:
     def __init__(self, pdf_parser, qa_engine):
@@ -10,98 +8,71 @@ class FinancialReportAnalyzer:
         self.qa_engine = qa_engine
         
         self.analysis_framework = {
-            "營收分析": {
-                "keywords": ["營業收入", "收入", "營收", "銷售", "revenue", "淨銷售", "總收入"],
-                "pages": range(1, 50),  
-                "metrics": ["成長率", "年增率", "季增率", "毛利率"]
-            },
-            "獲利能力分析": {
-                "keywords": ["淨利", "獲利", "利潤", "margin", "profit", "營業利益", "稅後淨利"],
-                "pages": range(1, 50),
-                "metrics": ["毛利率", "營業利益率", "淨利率", "ROE", "ROA"]
-            },
-            "財務結構分析": {
-                "keywords": ["資產", "負債", "股東權益", "debt", "equity", "總資產", "負債總額"],
-                "pages": range(1, 80),
-                "metrics": ["負債比率", "流動比率", "速動比率"]
-            },
-            "現金流分析": {
-                "keywords": ["現金流", "cash flow", "營運現金流", "現金及約當現金"],
-                "pages": range(1, 60),
-                "metrics": ["自由現金流", "現金轉換週期"]
-            },
-            "投資分析": {
-                "keywords": ["投資", "轉投資", "子公司", "investment", "資本支出", "設備投資"],
-                "pages": range(1, 100),  
-                "metrics": ["投資報酬率", "投資金額", "持股比例"]
-            },
-            "風險因子分析": {
-                "keywords": ["風險", "不確定", "挑戰", "風險因子", "市場風險", "匯率風險"],
-                "pages": range(30, 130),
-                "metrics": ["風險等級", "影響程度"]
-            }
+            "營收分析": ["營收", "收入", "營業收入", "銷售", "revenue", "sales"],
+            "獲利能力分析": ["獲利", "盈利", "淨利", "毛利", "profit", "earnings", "margin"],
+            "財務結構分析": ["資產", "負債", "權益", "資本", "debt", "equity", "assets"],
+            "現金流分析": ["現金流", "現金", "資金", "cash flow", "operating cash"],
+            "投資分析": ["投資", "資本支出", "研發", "capex", "investment", "R&D"],
+            "風險因子分析": ["風險", "不確定", "挑戰", "risk", "uncertainty", "challenge"]
         }
     
     def generate_comprehensive_report(self, report_a_path, report_b_path):
         print("開始生成分析報告...")
         
         print("解析PDF檔案...")
-        try:
-            parsed_data = self.pdf_parser.process_reports(report_a_path, report_b_path)
-            
-            if not parsed_data.get('report_a') or not parsed_data.get('report_b'):
-                raise Exception("PDF解析失敗，無法獲取財報內容")
-            
-            print(f"PDF解析完成 - 報告A: {len(parsed_data['report_a'])} 字符")
-            print(f"PDF解析完成 - 報告B: {len(parsed_data['report_b'])} 字符")
-            
-            self.parsed_content = parsed_data
-            
-        except Exception as e:
-            print(f"PDF解析錯誤: {str(e)}")
-            raise Exception(f"無法解析PDF檔案: {str(e)}")
+        text_a = self._parse_pdf_report(report_a_path, "report_a")
+        text_b = self._parse_pdf_report(report_b_path, "report_b")
         
-        analysis_a = self.analyze_single_report_from_content(
-            parsed_data['report_a'], "報告A"
-        )
-        analysis_b = self.analyze_single_report_from_content(
-            parsed_data['report_b'], "報告B"
-        )
+        print(f"PDF解析完成 - 報告A: {len(text_a)} 字符")
+        print(f"PDF解析完成 - 報告B: {len(text_b)} 字符")
         
-        comparison_report = self.generate_comparison_report(analysis_a, analysis_b)
+        analysis_a = {}
+        analysis_b = {}
         
-        report_path = f"reports/financial_analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
-        self.save_report(comparison_report, report_path)
-        
-        return comparison_report, report_path
-    
-    def analyze_single_report_from_content(self, content, report_name):
-        print(f"分析{report_name}...")
-        
-        analysis_results = {}
-        
-        for category, config in self.analysis_framework.items():
+        print("分析報告A...")
+        for category, keywords in self.analysis_framework.items():
             print(f"  分析{category}...")
-            
-            relevant_content = self.extract_relevant_content(
-                content, config["keywords"], category
-            )
-            
-            if relevant_content:
-                analysis = self.analyze_category_from_content(
-                    category, relevant_content, config
-                )
-                analysis_results[category] = analysis
-            else:
-                analysis_results[category] = {
-                    "status": "無相關數據",
-                    "searched_keywords": config["keywords"]
-                }
+            content_sections = self.extract_relevant_content(text_a, keywords, category)
+            analysis_a[category] = self.analyze_category_from_content(category, content_sections, {})
         
-        return analysis_results
+        print("分析報告B...")
+        for category, keywords in self.analysis_framework.items():
+            print(f"  分析{category}...")
+            content_sections = self.extract_relevant_content(text_b, keywords, category)
+            analysis_b[category] = self.analyze_category_from_content(category, content_sections, {})
+        
+        report = self.generate_comparison_report(analysis_a, analysis_b)
+        
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_path = f"reports/financial_analysis_{timestamp}.md"
+        json_path = f"reports/financial_analysis_{timestamp}.json"
+        
+        os.makedirs("reports", exist_ok=True)
+        
+        markdown_content = self.format_report_as_markdown(report)
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(markdown_content)
+        
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(report, f, ensure_ascii=False, indent=2)
+        
+        print(f"報告已儲存至: {output_path}")
+        print(f"JSON資料已儲存至: {json_path}")
+        
+        return report, output_path
+    
+    def _parse_pdf_report(self, pdf_path, report_name):
+        output_path = f"outputs/{report_name}_agent.txt"
+        
+        if not os.path.exists(output_path):
+            self.pdf_parser.extract_text_from_pdf(pdf_path, output_path)
+        
+        with open(output_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        return content
     
     def extract_relevant_content(self, full_content, keywords, category):
-        """從完整內容中提取相關片段"""
         if not full_content:
             return []
         
@@ -138,7 +109,6 @@ class FinancialReportAnalyzer:
         return unique_sections
     
     def analyze_category_from_content(self, category, content_sections, config):
-        """使用AI分析特定類別的內容"""
         if not content_sections:
             return {"status": "無內容可分析"}
         
@@ -158,31 +128,17 @@ class FinancialReportAnalyzer:
 3. 主要指標和比率
 4. 風險或機會評估
 
-注意：
-- 請引用具體的數字和百分比
-- 如果是台積電財報，請關注半導體產業特徵
-- 如果資料不完整，請明確說明哪些資訊缺失
-- 保持客觀分析，不要推測未提及的數據
-
 格式簡潔清楚。"""
 
-        try:
-            response = self.qa_engine.generate_answer(prompt, temperature=0.1)
-            
-            return {
-                "status": "已分析",
-                "analysis": response,
-                "sections_analyzed": len(content_sections),
-                "keywords_found": [kw for section in content_sections for kw in section['keyword_found']],
-                "data_quality": "良好" if len(content_sections) >= 2 else "有限"
-            }
-            
-        except Exception as e:
-            return {
-                "status": "分析失敗", 
-                "error": str(e),
-                "sections_found": len(content_sections)
-            }
+        response = self.qa_engine.generate_answer(prompt, temperature=0.1)
+        
+        return {
+            "status": "已分析",
+            "analysis": response,
+            "sections_analyzed": len(content_sections),
+            "keywords_found": [kw for section in content_sections for kw in section['keyword_found']],
+            "data_quality": "良好" if len(content_sections) >= 2 else "有限"
+        }
     
     def generate_comparison_report(self, analysis_a, analysis_b):
         report = {
@@ -203,7 +159,6 @@ class FinancialReportAnalyzer:
                 report["詳細分析"][category] = comparison
         
         report["摘要"] = self.generate_executive_summary(report["詳細分析"])
-        
         report["綜合評估"] = self.generate_overall_assessment(analysis_a, analysis_b)
         
         return report
@@ -213,8 +168,7 @@ class FinancialReportAnalyzer:
             return {
                 "比較結果": f"資料不足，無法比較。報告A狀態: {analysis_a.get('status')}，報告B狀態: {analysis_b.get('status')}",
                 "報告A狀態": analysis_a.get("status", "未知"),
-                "報告B狀態": analysis_b.get("status", "未知"),
-                "搜尋關鍵字": analysis_a.get("searched_keywords", [])
+                "報告B狀態": analysis_b.get("status", "未知")
             }
         
         prompt = f"""請比較以下兩份台積電財報的{category}：
@@ -229,88 +183,62 @@ class FinancialReportAnalyzer:
 1. 主要數據差異（具體數字比較）
 2. 趨勢變化分析
 3. 優劣勢評估
-4. 投資者關注重點
+4. 關鍵發現
 
-基於實際數據進行分析，如果某項數據不完整請說明。用繁體中文回答。"""
+格式簡潔清楚。"""
 
-        try:
-            comparison_result = self.qa_engine.generate_answer(prompt, temperature=0.1)
-            
-            return {
-                "比較結果": comparison_result,
-                "資料品質": {
-                    "報告A": analysis_a.get("data_quality", "未知"),
-                    "報告B": analysis_b.get("data_quality", "未知")
-                },
-                "分析片段數": {
-                    "報告A": analysis_a.get("sections_analyzed", 0),
-                    "報告B": analysis_b.get("sections_analyzed", 0)
-                },
-                "找到關鍵字": {
-                    "報告A": analysis_a.get("keywords_found", []),
-                    "報告B": analysis_b.get("keywords_found", [])
-                }
-            }
-            
-        except Exception as e:
-            return {
-                "比較結果": f"比較分析失敗: {str(e)}",
-                "錯誤": True
-            }
-    
-    def generate_executive_summary(self, detailed_analysis):
-        summary_points = []
-        
-        for category, analysis in detailed_analysis.items():
-            if "比較結果" in analysis and not analysis.get("錯誤"):
-                result = analysis['比較結果']
-                if len(result) > 200:
-                    summary = result[:200] + "..."
-                else:
-                    summary = result
-                summary_points.append(f"**{category}**: {summary}")
+        comparison_result = self.qa_engine.generate_answer(prompt, temperature=0.1)
         
         return {
-            "關鍵發現": summary_points[:5],
-            "整體評估": "基於台積電財報PDF真實內容進行分析",
-            "資料覆蓋率": f"{len([a for a in detailed_analysis.values() if not a.get('錯誤')])}/{len(detailed_analysis)}"
+            "比較結果": comparison_result,
+            "資料品質": {
+                "報告A": analysis_a.get("data_quality", "未知"),
+                "報告B": analysis_b.get("data_quality", "未知")
+            },
+            "分析片段數": {
+                "報告A": analysis_a.get("sections_analyzed", 0),
+                "報告B": analysis_b.get("sections_analyzed", 0)
+            }
+        }
+    
+    def generate_executive_summary(self, detailed_analysis):
+        successful_analyses = {k: v for k, v in detailed_analysis.items() 
+                             if "比較結果" in v and len(v["比較結果"]) > 50}
+        
+        key_findings = []
+        for category, analysis in successful_analyses.items():
+            finding = analysis["比較結果"]
+            if len(finding) > 200:
+                finding = finding[:200] + "..."
+            key_findings.append(f"{category}: {finding}")
+        
+        coverage_rate = f"{len(successful_analyses)}/{len(self.analysis_framework)} ({len(successful_analyses)/len(self.analysis_framework)*100:.1f}%)"
+        
+        return {
+            "關鍵發現": key_findings[:5],
+            "資料覆蓋率": coverage_rate,
+            "分析完整度": "高" if len(successful_analyses) >= 4 else "中" if len(successful_analyses) >= 2 else "低"
         }
     
     def generate_overall_assessment(self, analysis_a, analysis_b):
-        categories_a = sum(1 for a in analysis_a.values() if a.get("status") == "已分析")
-        categories_b = sum(1 for a in analysis_b.values() if a.get("status") == "已分析")
+        successful_a = sum(1 for v in analysis_a.values() if v.get("status") == "已分析")
+        successful_b = sum(1 for v in analysis_b.values() if v.get("status") == "已分析")
         total_categories = len(self.analysis_framework)
         
         return {
             "分析完整度": {
-                "報告A": f"{categories_a}/{total_categories} ({categories_a/total_categories*100:.1f}%)",
-                "報告B": f"{categories_b}/{total_categories} ({categories_b/total_categories*100:.1f}%)"
+                "報告A": f"{successful_a}/{total_categories} ({successful_a/total_categories*100:.1f}%)",
+                "報告B": f"{successful_b}/{total_categories} ({successful_b/total_categories*100:.1f}%)"
             },
             "建議": [
-                "本分析基於台積電PDF財報真實內容",
-                "已修復PDF解析問題，確保分析基於實際數據",
-                "如需更深入分析，建議結合市場數據和產業分析"
+                "建議檢視財務數據的一致性",
+                "關注關鍵指標的變化趨勢",
+                "評估投資決策的風險因子"
             ],
-            "分析方法": "AI驅動的PDF內容分析（修復版）"
+            "分析方法": "AI智能語義分析"
         }
     
-    def save_report(self, report, output_path):
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
-        md_content = self.format_report_as_markdown(report)
-        
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(md_content)
-        
-        json_path = output_path.replace('.md', '.json')
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(report, f, ensure_ascii=False, indent=2)
-        
-        print(f"報告已儲存至: {output_path}")
-        print(f"JSON資料已儲存至: {json_path}")
-    
     def format_report_as_markdown(self, report):
-        """格式化報告為Markdown"""
         md = f"""# {report['標題']}
 
 **生成時間**: {report['生成時間']}
@@ -330,12 +258,6 @@ class FinancialReportAnalyzer:
         for category, analysis in report['詳細分析'].items():
             md += f"### {category}\n\n"
             md += f"{analysis.get('比較結果', '無分析結果')}\n\n"
-            
-            if '資料品質' in analysis:
-                md += f"**資料品質**: 報告A: {analysis['資料品質']['報告A']}, 報告B: {analysis['資料品質']['報告B']}\n\n"
-            
-            if '分析片段數' in analysis:
-                md += f"**分析片段數**: 報告A: {analysis['分析片段數']['報告A']}, 報告B: {analysis['分析片段數']['報告B']}\n\n"
         
         md += "## 綜合評估\n\n"
         

@@ -847,17 +847,17 @@ class FinancialTableAgent:
     
     def _print_agent_summary(self, stats):
         """打印Agent處理摘要"""
-        print(f"\n📊 AI Agent處理摘要:")
-        print(f"   🤖 智能策略選擇")
-        print(f"   📄 成功處理: {stats['total_pages'] - stats['failed_pages']}/{stats['total_pages']} 頁")
-        print(f"   🏦 財務表格發現: {stats['financial_tables_found']} 個")
-        print(f"   🔍 OCR增強: {stats['ocr_pages']} 頁")
-        print(f"   ⚙️ 混合處理: {stats['hybrid_pages']} 頁")
+        print(f"\nAI Agent處理摘要:")
+        print(f"智能策略選擇")
+        print(f"成功處理: {stats['total_pages'] - stats['failed_pages']}/{stats['total_pages']} 頁")
+        print(f"財務表格發現: {stats['financial_tables_found']} 個")
+        print(f"OCR增強: {stats['ocr_pages']} 頁")
+        print(f"混合處理: {stats['hybrid_pages']} 頁")
         
         if TESSERACT_AVAILABLE:
-            print(f"   ✅ OCR引擎: 可用")
+            print(f"OCR引擎: 可用")
         else:
-            print(f"   ⚠️ OCR引擎: 不可用 (建議安裝)")
+            print(f"OCR引擎: 不可用 (建議安裝)")
     
     def process_reports(self, report_a_path, report_b_path, output_dir="outputs"):
         """AI Agent處理兩份報告"""

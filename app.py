@@ -6,24 +6,24 @@ from datetime import datetime
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 from parser.pdf_parser import PDFParser
-from utils.data_loader import DataLoader
-from utils.prompt_builder import PromptBuilder
+from utils.session_manager import SessionManager
+from semantic import SemanticRetriever
 from llm.qa_engine import QAEngine
 from analyzer.report_analyzer import FinancialReportAnalyzer
 
 class FinancialAnalysisSystem:
     def __init__(self):
         self.pdf_parser = PDFParser()
-        self.data_loader = DataLoader()
-        self.prompt_builder = PromptBuilder()
+        self.session_manager = SessionManager()
+        self.semantic_retriever = SemanticRetriever()
         self.qa_engine = QAEngine()
         self.report_analyzer = FinancialReportAnalyzer(self.pdf_parser, self.qa_engine)
         
         self.reports_loaded = False
         self.current_session = None
+        self.conversation_history = []
         
         print("財報比較分析系統")
-        print("=" * 40)
     
     def run_analysis_mode(self, report_a_path=None, report_b_path=None):
         if not report_a_path:
@@ -31,78 +31,20 @@ class FinancialAnalysisSystem:
         if not report_b_path:
             report_b_path = "data/report_b.pdf"
         
-        if not os.path.exists(report_a_path):
-            print(f"找不到財報A: {report_a_path}")
-            return False
+        print("\n智能財報分析模式")
         
-        if not os.path.exists(report_b_path):
-            print(f"找不到財報B: {report_b_path}")
-            return False
+        report, report_path = self.report_analyzer.generate_comprehensive_report(
+            report_a_path, report_b_path
+        )
         
-        print("\n=== 智能財報分析模式 ===")
-        print("此模式將生成完整的財報比較分析報告")
-        print("分析範圍: 營收、獲利、財務結構、現金流、投資、風險")
-        print()
+        print(f"\n分析完成")
+        print(f"報告路徑: {report_path}")
         
-        try:
-            report, report_path = self.report_analyzer.generate_comprehensive_report(
-                report_a_path, report_b_path
-            )
-            
-            print(f"\n分析完成！")
-            print(f"報告路徑: {report_path}")
-            print()
-            
-            self.display_report_summary(report)
-            
-            return True
-            
-        except Exception as e:
-            print(f"分析失敗: {str(e)}")
-            return False
-    
-    def display_report_summary(self, report):
-        print("=== 分析結果摘要 ===")
-        print()
-        
-        summary = report.get('摘要', {})
-        findings = summary.get('關鍵發現', [])
-        
-        if findings:
-            print("關鍵發現:")
-            for i, finding in enumerate(findings[:3], 1):
-                clean_finding = finding.replace('**', '').replace('*', '')
-                if len(clean_finding) > 100:
-                    clean_finding = clean_finding[:100] + "..."
-                print(f"{i}. {clean_finding}")
-            print()
-        
-        assessment = report.get('綜合評估', {})
-        completeness = assessment.get('分析完整度', {})
-        
-        if completeness:
-            print("分析完整度:")
-            print(f"  報告A: {completeness.get('報告A', '未知')}")
-            print(f"  報告B: {completeness.get('報告B', '未知')}")
-            print()
-        
-        detailed = report.get('詳細分析', {})
-        successful_categories = [cat for cat, data in detailed.items() 
-                               if not data.get('錯誤', False)]
-        
-        if successful_categories:
-            print(f"成功分析類別 ({len(successful_categories)}個):")
-            for category in successful_categories:
-                print(f"  - {category}")
-            print()
-        
-        print("請查看完整報告檔案以獲得詳細分析結果。")
-        print()
+        self.display_report_summary(report)
+        return True
     
     def run_chat_mode(self, report_a_path=None, report_b_path=None, force_reparse=False):
-        print("\n=== 對話問答模式 ===")
-        print("此模式支援自由問答，但受模型上下文長度限制")
-        print()
+        print("\n對話問答模式")
         
         self.setup_reports(report_a_path, report_b_path, force_reparse)
         
@@ -118,158 +60,90 @@ class FinancialAnalysisSystem:
         if not report_b_path:
             report_b_path = "data/report_b.pdf"
         
-        status = self.data_loader.check_reports_availability()
+        report_a_output = "outputs/report_a_agent.txt"
+        report_b_output = "outputs/report_b_agent.txt"
         
-        if status['both_available'] and not force_reparse:
-            print("載入已解析的財報")
-            self._load_existing_reports()
-        else:
-            self._parse_pdf_reports(report_a_path, report_b_path)
-    
-    def _load_existing_reports(self):
-        try:
-            reports = self.data_loader.load_report_texts()
-            
-            if reports['report_a'] and reports['report_b']:
-                max_length = 10000  # 減少長度
-                truncated_a = self._truncate_text(reports['report_a'], max_length)
-                truncated_b = self._truncate_text(reports['report_b'], max_length)
-                
-                self.prompt_builder.set_report_contents(truncated_a, truncated_b)
-                self.reports_loaded = True
-                print("財報載入完成 (已截斷至適當長度)")
-            else:
-                print("文字檔為空，需重新解析")
-                self.reports_loaded = False
-                
-        except Exception as e:
-            print(f"載入失敗: {str(e)}")
-            self.reports_loaded = False
-    
-    def _truncate_text(self, text, max_length):
-        if len(text) <= max_length:
-            return text
-        
-        truncated = text[:max_length]
-        last_period = truncated.rfind('。')
-        
-        if last_period > max_length * 0.8:
-            return truncated[:last_period + 1] + "\n\n[為避免上下文過長，內容已截斷。如需完整分析，請使用分析模式。]"
-        else:
-            return truncated + "\n\n[內容已截斷，請使用分析模式。]"
-    
-    def _parse_pdf_reports(self, report_a_path, report_b_path):
-        if not os.path.exists(report_a_path):
-            print(f"找不到財報A: {report_a_path}")
-            return False
-        
-        if not os.path.exists(report_b_path):
-            print(f"找不到財報B: {report_b_path}")
-            return False
-        
-        try:
+        if force_reparse or not os.path.exists(report_a_output) or not os.path.exists(report_b_output):
             print("解析PDF中...")
-            results = self.pdf_parser.process_reports(report_a_path, report_b_path)
-            
-            if results['report_a'] and results['report_b']:
-                max_length = 10000
-                truncated_a = self._truncate_text(results['report_a'], max_length)
-                truncated_b = self._truncate_text(results['report_b'], max_length)
-                
-                self.prompt_builder.set_report_contents(truncated_a, truncated_b)
-                self.reports_loaded = True
-                print("PDF解析完成 (已截斷至適當長度)")
-                return True
-            else:
-                print("解析失敗")
-                return False
-                
-        except Exception as e:
-            print(f"解析錯誤: {str(e)}")
-            return False
+            self.pdf_parser.extract_text_from_pdf(report_a_path, report_a_output)
+            self.pdf_parser.extract_text_from_pdf(report_b_path, report_b_output)
+        
+        with open(report_a_output, 'r', encoding='utf-8') as f:
+            report_a_text = f.read()
+        with open(report_b_output, 'r', encoding='utf-8') as f:
+            report_b_text = f.read()
+        
+        print("建立TF-IDF索引...")
+        self.semantic_retriever.chunk_documents(report_a_text, report_b_text)
+        self.semantic_retriever.build_index()
+        
+        self.reports_loaded = True
+        print("PDF解析完成")
     
     def start_conversation(self):
         print("\n對話模式已啟動")
-        print("注意: 受上下文長度限制，僅載入部分內容")
-        print("輸入 'help' 查看指令，'quit' 退出")
-        print("-" * 40)
+        print("輸入 'quit' 退出")
         
         while True:
-            try:
-                user_input = input("\n您的問題: ").strip()
-                
-                if not user_input:
-                    continue
-                
-                if user_input.lower() in ['quit', 'exit', '退出']:
-                    print("再見")
-                    break
-                elif user_input.lower() == 'help':
-                    self._show_help()
-                    continue
-                elif user_input.lower() == 'save':
-                    self._save_conversation()
-                    continue
-                elif user_input.lower() == 'load':
-                    self._load_conversation()
-                    continue
-                elif user_input.lower() == 'clear':
-                    self._clear_conversation()
-                    continue
-                elif user_input.lower() == 'status':
-                    self._show_status()
-                    continue
-                
-                print("思考中...")
-                answer = self._get_answer(user_input)
-                
-                if answer:
-                    print(f"\n{answer}\n")
-                    self.prompt_builder.add_conversation(user_input, answer)
-                else:
-                    print("無法獲得回答")
-                
-            except KeyboardInterrupt:
-                print("\n程式中斷")
+            question = input("\n您的問題: ").strip()
+            
+            if question.lower() in ['quit', 'exit']:
                 break
-            except Exception as e:
-                print(f"錯誤: {str(e)}")
+            elif question.lower() == 'save':
+                self._save_conversation()
+            elif question.lower() == 'load':
+                self._load_conversation()
+            elif question.lower() == 'clear':
+                self._clear_conversation()
+            elif question:
+                print("思考中...")
+                answer = self._get_answer(question)
+                if answer:
+                    print(f"\n{answer}")
+                    self.conversation_history.append({
+                        "user": question,
+                        "assistant": answer
+                    })
+                else:
+                    print("無法生成回答")
     
     def _get_answer(self, question):
-        try:
-            full_prompt = self.prompt_builder.build_full_prompt(question)
-            
-            if len(full_prompt) > 15000:
-                return "問題內容過長，建議使用分析模式獲得更完整的答案。"
-            
-            answer = self.qa_engine.generate_answer(full_prompt)
-            return answer
-        except Exception as e:
-            print(f"回答生成錯誤: {str(e)}")
-            return None
-    
-    def _show_help(self):
-        """顯示幫助"""
-        help_text = """
-指令說明:
-  quit/exit  - 退出程式
-  save       - 儲存對話
-  load       - 載入對話
-  clear      - 清除歷史
-  status     - 系統狀態
-  help       - 顯示此說明
+        relevant_context, selected_chunks = self.semantic_retriever.smart_context_selection(question)
+        
+        if not relevant_context:
+            return "未找到相關內容，請重新表述問題"
+        
+        system_prompt = """你是專業的財務分析助手。請基於提供的相關財報內容回答問題。
 
-問題範例 (受上下文長度限制):
-  • 報告A的主要營收來源
-  • 兩家公司的獲利能力比較
-  • 財務結構有何差異
+回答要求：
+1. 使用繁體中文
+2. 基於提供的內容準確回答
+3. 引用具體數字支持回答
+4. 如果內容不足以回答問題，請明確說明
+5. 比較兩份報告時請明確標示報告來源"""
 
-注意: 如需完整分析，建議使用分析模式
-        """
-        print(help_text)
+        conversation_context = ""
+        if self.conversation_history:
+            recent_history = self.conversation_history[-3:]
+            for i, conv in enumerate(recent_history, 1):
+                conversation_context += f"\n對話{i}:\n問: {conv['user']}\n答: {conv['assistant'][:100]}...\n"
+
+        prompt = f"""{system_prompt}
+
+相關財報內容:
+{relevant_context}
+
+對話歷史:
+{conversation_context}
+
+問題: {question}
+
+請基於以上內容用繁體中文詳細回答。"""
+
+        return self.qa_engine.generate_answer(prompt)
     
     def _save_conversation(self):
-        if not self.prompt_builder.conversation_history:
+        if not self.conversation_history:
             print("無對話記錄可儲存")
             return
         
@@ -278,19 +152,19 @@ class FinancialAnalysisSystem:
             session_name = datetime.now().strftime("%m%d_%H%M")
         
         data = {
-            "conversation_history": self.prompt_builder.conversation_history,
-            "summary": self.prompt_builder.get_conversation_summary()
+            "conversation_history": self.conversation_history,
+            "summary": {"total_conversations": len(self.conversation_history)}
         }
         
-        if self.data_loader.save_conversation_session(data, session_name):
+        filepath = self.session_manager.save_conversation_session(data, session_name)
+        if filepath:
             print(f"已儲存: {session_name}")
             self.current_session = session_name
         else:
             print("儲存失敗")
     
     def _load_conversation(self):
-        """載入對話"""
-        sessions = self.data_loader.list_conversation_sessions()
+        sessions = self.session_manager.list_conversation_sessions()
         
         if not sessions:
             print("無歷史對話")
@@ -301,77 +175,76 @@ class FinancialAnalysisSystem:
             time_str = session['modified_time'].strftime("%m/%d %H:%M")
             print(f"  {i}. {session['session_name']} ({time_str})")
         
-        try:
-            choice = input("\n選擇編號 (按Enter取消): ").strip()
-            if not choice:
-                return
+        choice = input("\n選擇編號 (按Enter取消): ").strip()
+        if not choice:
+            return
+        
+        index = int(choice) - 1
+        if 0 <= index < len(sessions):
+            session = sessions[index]
+            data = self.session_manager.load_conversation_session(session['session_name'])
             
-            index = int(choice) - 1
-            if 0 <= index < len(sessions):
-                session = sessions[index]
-                data = self.data_loader.load_conversation_session(session['session_name'])
-                
-                if data:
-                    self.prompt_builder.conversation_history = data.get('conversation_history', [])
-                    self.current_session = session['session_name']
-                    print(f"載入: {session['session_name']}")
-                else:
-                    print("載入失敗")
+            if data:
+                self.conversation_history = data.get('conversation_history', [])
+                self.current_session = session['session_name']
+                print(f"載入: {session['session_name']}")
             else:
-                print("無效選擇")
-                
-        except ValueError:
-            print("請輸入數字")
-        except Exception as e:
-            print(f"載入錯誤: {str(e)}")
+                print("載入失敗")
+        else:
+            print("無效選擇")
     
     def _clear_conversation(self):
         if input("確定清除對話？(y/N): ").strip().lower() in ['y', 'yes']:
-            self.prompt_builder.clear_conversation_history()
+            self.conversation_history = []
             self.current_session = None
             print("已清除")
         else:
             print("已取消")
     
-    def _show_status(self):
-        print(f"\n系統狀態:")
-        print(f"  財報: {'已載入(截斷版)' if self.reports_loaded else '未載入'}")
-        print(f"  對話: {len(self.prompt_builder.conversation_history)} 輪")
-        print(f"  會話: {self.current_session or '未儲存'}")
+    def display_report_summary(self, report):
+        print("\n分析結果摘要")
         
-        model_info = self.qa_engine.get_model_info()
-        model_ok = model_info.get('model_available', False)
-        print(f"  模型: {'已連接' if model_ok else '未連接'} {self.qa_engine.model_name}")
+        summary = report.get('摘要', {})
+        findings = summary.get('關鍵發現', [])
+        
+        if findings:
+            print("\n關鍵發現:")
+            for i, finding in enumerate(findings[:3], 1):
+                clean_finding = finding.replace('**', '').replace('*', '')
+                if len(clean_finding) > 100:
+                    clean_finding = clean_finding[:100] + "..."
+                print(f"{i}. {clean_finding}")
+        
+        assessment = report.get('綜合評估', {})
+        completeness = assessment.get('分析完整度', {})
+        
+        if completeness:
+            print(f"\n分析完整度:")
+            print(f"  報告A: {completeness.get('報告A', '未知')}")
+            print(f"  報告B: {completeness.get('報告B', '未知')}")
 
 
 def main():
     parser = argparse.ArgumentParser(description="財報比較分析系統")
     parser.add_argument("--report-a", help="財報A路徑")
     parser.add_argument("--report-b", help="財報B路徑")
-    parser.add_argument("--mode", choices=['analysis', 'chat'], default='analysis',
-                       help="運行模式: analysis(分析模式) 或 chat(問答模式)")
+    parser.add_argument("--mode", choices=['analysis', 'chat'], default='analysis')
     parser.add_argument("--force-reparse", action="store_true", help="強制重新解析")
     
     args = parser.parse_args()
     
-    try:
-        system = FinancialAnalysisSystem()
-        
-        if args.mode == 'analysis':
-            success = system.run_analysis_mode(args.report_a, args.report_b)
-            
-            if success:
-                choice = input("\n是否進入問答模式進行額外查詢？(y/N): ").strip().lower()
-                if choice in ['y', 'yes']:
-                    system.run_chat_mode(args.report_a, args.report_b, args.force_reparse)
-        
-        elif args.mode == 'chat':
-            system.run_chat_mode(args.report_a, args.report_b, args.force_reparse)
+    system = FinancialAnalysisSystem()
     
-    except KeyboardInterrupt:
-        print("\n程式結束")
-    except Exception as e:
-        print(f"錯誤: {str(e)}")
+    if args.mode == 'analysis':
+        success = system.run_analysis_mode(args.report_a, args.report_b)
+        
+        if success:
+            choice = input("\n是否進入問答模式進行額外查詢？(y/N): ").strip().lower()
+            if choice in ['y', 'yes']:
+                system.run_chat_mode(args.report_a, args.report_b, args.force_reparse)
+    
+    elif args.mode == 'chat':
+        system.run_chat_mode(args.report_a, args.report_b, args.force_reparse)
 
 
 if __name__ == "__main__":
