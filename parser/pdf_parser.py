@@ -1,6 +1,3 @@
-"""
-完整OCR增強財報Agent - 專門處理複雜表格的AI代理
-"""
 import os
 import re
 import io

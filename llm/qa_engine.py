@@ -1,6 +1,3 @@
-"""
-QA引擎
-"""
 import requests
 import json
 import logging
